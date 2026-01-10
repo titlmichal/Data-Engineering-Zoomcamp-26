@@ -1,4 +1,5 @@
 import pandas as pd
+import click
 from tqdm import tqdm
 from sqlalchemy import create_engine
 
@@ -27,19 +28,31 @@ parse_dates = [
     "tpep_dropoff_datetime"
 ]
 
-def run():
-    year = 2021
-    month = 1
+# THIS ALLOWS FOR CONFIGURING SCRIPT PARAMS FROM THE CLI
+@click.command()
+@click.option('--pg-user', default='root', help='PostgreSQL username')
+@click.option('--pg-password', default='root', help='PostgreSQL password')
+@click.option('--pg-host', default='localhost', help='PostgreSQL host')
+@click.option('--pg-port', default='5432', help='PostgreSQL port')
+@click.option('--pg-db', default='ny_taxi', help='PostgreSQL database name')
+@click.option('--year', default=2021, type=int, help='Year of the data')
+@click.option('--month', default=1, type=int, help='Month of the data')
+@click.option('--chunksize', default=100000, type=int, help='Chunk size for ingestion')
+@click.option('--table-name', default=f'yellow_taxi_data', help='Target table name')
 
-    pg_user = "root"
-    pg_password = "root"
-    pg_host = "localhost"
-    pg_port = "5432"
-    pg_db = "ny_taxi"
+def run(pg_user, pg_password, pg_host, pg_port, pg_db, year, month, chunksize, table_name):
+    # year = 2021
+    # month = 1
 
-    table_name = "yellow_taxi_data"
+    # pg_user = "root"
+    # pg_password = "root"
+    # pg_host = "localhost"
+    # pg_port = "5432"
+    # pg_db = "ny_taxi"
 
-    chunksize = 100000
+    # table_name = "yellow_taxi_data"
+
+    # chunksize = 100000
 
     # DATA DOWNLOAD
     prefix = "https://github.com/DataTalksClub/nyc-tlc-data/releases/download/yellow/"
@@ -81,7 +94,7 @@ def run():
             )
         print("Chunk inserted")
 
-    print("Data ingest done")
+    print(f"Data ingest done for month {month} of year {year}.")
 
 if __name__ == "__main__":
     run()
