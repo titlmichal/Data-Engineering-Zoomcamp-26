@@ -432,8 +432,65 @@ docker run -it \
 - configuration: right on servers --> registrer --> server --> (general tab) name = local docker --> (connection tab) host name = pgdb, port = 5432, username = root, password = root
 
 - but what if I dont want to paste the commands everytime and want to run it all at once? --> Docker compose
-- --> create new file "docker-compose.yaml"
+- --> create new file "docker-compose.yaml" = describes all the images that need to be run (pgdb, pgadmin in thic case)
 - btw by default what is run via/in one docker compose file is run within ONE network
+- how to make one? put the single commands together and ask GPT/Gemini :)
+- result:
+```yaml
+services:
+  pgdb:
+    image: postgres:18
+    environment:
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=root
+      - POSTGRES_DB=ny_taxi
+    volumes:
+      - "ny_taxi:/var/lib/postgresql:rw"
+    ports:
+      - "5432:5432"
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=root
+    volumes:
+      - "pgadmin_data:/var/lib/pgadmin"
+    ports:
+      - "8085:80"
 
-...stoped at 2:00:20
-(btw should make main README more general and put descriptive ones in respective dirs)
+volumes:
+  ny_taxi:
+  pgadmin_data:
+```
+- how is is structured:
+1) level 1: services for as containers + volumes as volumes
+2) level 2: name of each container (NOT image name) --> pgdb and pgadmin (btw then the actual container name is dir_name-this_name-number)
+3) level 3: image name (NOT container name), environment variables, volumes and port
++ volumes are declared twice
+1) once below under volumes --> im using NAMED volumes (serviced by Docker itself), im NOT doing bind mount (exact path on my host machine) => its telling Docker that there actually IS or TO CREATE a volume with this name
+2) once within services = thanks to being declared under volumes, Docker knows its a volume, not a path in local machine (!)
+- generally: named volumes better for DB and safety (quicker but harder to find --> ```docker volume inspect```) X bind mounts better for scripts and development (can easily edit but troublesome with access rights)
+
+```docker-compose up```
+- I have to be in the respective directory --> it will run the containers according to the setup
+- --> bcs Im using docker COMPOSE now, the data is not there as before BCS the volumes are different
+- --> COMPOSE add directory name in front of the volume name --> hence ny_taxi volume is actually pipeline_ny_taxi --> see ```docker volume ls```
+- --> to get data, rerun the ingestion script and edit the network to network created by docker compose, visible by ```docker network ls```
+```bash
+docker run -it  --network=pipeline_default zoomcamp:data_ingest_1     --pg-user=root     --pg-password=root     --pg-host=pgdb     --pg-port=5432     --pg-db=ny_taxi     --table-name=yellow_taxi_trips_2021_2     --year=2021     --month=2     --chunksize=100000
+```
+
+- BTW I made a mistake that I changed service name in readme (from database to pgdb) but not in yaml --> pgadmin couldnt find DB
+- --> service name/key in yaml = hostname in network/DNS
+
+```docker-compose down```
+- to stop to containers
+```docker-compose ps```
+- to check what is running
+
+#### Clean up
+
+```docker container prune``` to remove all stopped containers
+```docker image prune``` to remove all images
+```docker volume prune``` to remove all images
+```docker network prune``` to remove all images
