@@ -494,3 +494,132 @@ docker run -it  --network=pipeline_default zoomcamp:data_ingest_1     --pg-user=
 ```docker image prune``` to remove all images
 ```docker volume prune``` to remove all images
 ```docker network prune``` to remove all images
+
+## SQL Refresher (course video)
+
+https://www.youtube.com/watch?v=QEcps_iskgg&list=PL3MmuxUbc_hJed7dXYoJw8DoCuVHhGEQb&index=11
+https://github.com/DataTalksClub/data-engineering-zoomcamp/blob/main/01-docker-terraform/docker-sql/09-sql-refresher.md
+
+- nothing special except maybe few I dont use that often
+1) implicit inner join = putting all source table unders FROM clause and setting join conditions under WHERE
+```SQL
+SELECT
+    tpep_pickup_datetime,
+    tpep_dropoff_datetime,
+    total_amount,
+    CONCAT(zpu."Borough", ' | ', zpu."Zone") AS "pickup_loc",
+    CONCAT(zdo."Borough", ' | ', zdo."Zone") AS "dropoff_loc"
+FROM
+    yellow_taxi_trips t,
+    zones zpu,
+    zones zdo
+WHERE
+    t."PULocationID" = zpu."LocationID"
+    AND t."DOLocationID" = zdo."LocationID"
+LIMIT 100;
+```
+2) full outer join + filtering for rows with null values in key columns = other way to do minus
+
+
+## Intro to GCP (course video)
+
+https://www.youtube.com/watch?v=18jIzE41fJ4&list=PL3MmuxUbc_hJed7dXYoJw8DoCuVHhGEQb&index=4
+https://console.cloud.google.com/
+
+- cloud computing service
+- multiple categories:
+![alt text](image.png)
+- here mainly big data (bigquery, dataflows, dataprep, dataproc) and storage/DBs (bigtable, datastore, spanner, sql, storage)
+
+- GCP works in terms in projects mainly
+- navgigation via: 1) navigation menu on the left; 2) search; 3) tiles on the main menu
+- now seeing cloud storage --> contains buckets (buckets of data) 
+- ... similar to S3 = buckets contain files (so kinda like a directory)
+- ... into bucket, we will load data during the course
+
+## Introduction Terraform: Concepts and Overview, a primer (course video)
+
+https://www.youtube.com/watch?v=s2bOYDCKl_M&list=PL3MmuxUbc_hJed7dXYoJw8DoCuVHhGEQb&index=12
+- allegedly slight intro into Terraform, enough to get me going/setting up infra and resources
+CAUTION: be very sure of what Im deploying, before deploying! (it can cost me)
+
+- terraform is about terraforming cloud (or local) plaftorm = setting up infrastructure so place where the code can live and SW can run
+- = IaaS tool letting me to define cloud or on-prem resources in readable config files that can be versioned, reused and shared
+- ... it comes down to the IaaS = infrastructure as a code
+1) simplicity = easy to keep track of the file containing it all (terraform file, .ts suffix)
+2) collaboration = pushable to repo, easier to review, correct, ... and deploy the infra
+3) reproducibility = e.g. when sharing interesting project to be ran --> just update params and go
+4) ensure resources are removed = once im done with resources (and dont want to keep paying) --> quick terraform command --> everything is down
+
+### what it is NOT/what it does NOT do?
+1) manage/update code in infrastructure
+2) give ability to change immutable resources (e.g. virtual machine type, google cloud/bucket location)
+3) manage resources not defined in the terraform file (e.g. kubernetes cluster)
+
+- Terraform stands in my local machine as a communicator with platforms of services (GCP, Azure, AWS)
+- --> I define in terraform file I want to use e.g. GCP --> terraform will use its file and connect to that platform
+- --> I will need some way to authorize the access (service account, access token, ...)
+
+https://registry.terraform.io/browse/providers
+- what are providers?
+- = logical abstraction of an upstream API. They are responsible for understanding API interactions and exposing resources.
+- code allowing terraform to communicate to manage resources on AWS/Azure/GCP/Kubernets/VSphere/Alibaba cloud/AD...
+- ... code to communicate with cloud/on-prem platforms
+
+### key terraform commands
+1) ```terraform init``` --> to get providers defined in the file
+2) ```terraform plan``` --> what am I about to do/which resources will be created
+3) ```terraform apply``` --> do what is defined/planned in the terraform file/go out and build the infra
+4) ```terraform destroy``` --> remove everything define in terraform file/destroys everthing built
+
+## Terraform Basics: Simple one file Terraform Deployment (course video)
+
+https://www.youtube.com/watch?v=Y2ux7gq3Z0o&list=PL3MmuxUbc_hJed7dXYoJw8DoCuVHhGEQb&index=13
+
+- 1st setting up service account to be used as authentication to GCP
+- service account is similar to standard account but not meant for logging in by user, but by code to be used for running stuff
+- IAM --> service accounts
+- name is not that important, BUT role is --> i want to create and use bucket AND create dataset --> 2 roles
+--> service = storage; roles = storage admin
+--> service = bigquery; roles = bigquery admin
+- in real world I would want to limit the roles, but this is about setting up and taking down resources --> bucket creater and destruction in storage + create and destroy dataset in bigquery
+- BTW permissions/roles can be added/removed to each account in IAM settings
+
+### Service account
+
+- --> now I need a way to say that I have the permission to run as the service account --> key --> ```Manage keys``` under given account actions
+- BTW by default its restricted now --> docs approach didnt work --> had to set org policy admin to my role + go to cloud console:
+```gcloud resource-manager org-policies disable-enforce iam.disableServiceAccountKeyCreation --project=terraform-demo-484316```
+- CAUTION: NEVER EVER SHARE THIS (e.g. to github or email or drive or anyone)...same like with SSH, private keys and similar
+--> if put in watched directory --> use gitignore
+
+- Terraform VSC extension: just download the one from the author company: Hashicorp
+- helps with autocomplete and this good stuff
+
+### terraform file
+
+
+- install terraform according to this: https://github.com/DataTalksClub/data-engineering-zoomcamp/blob/main/01-docker-terraform/terraform/windows.md
+- add terraform to PATH: https://gist.github.com/nex3/c395b2f8fd4b02068be37c961301caa7 (advanced system settings - envi variables - add path to the terraform.exe directory)
+- create ```main.tf```
+- start with provider setuo from docs: https://registry.terraform.io/providers/hashicorp/google/latest/docs
+```
+terraform {
+  required_providers {
+    google = {
+      source = "hashicorp/google"
+      version = "7.16.0"
+    }
+  }
+}
+
+provider "google" {
+  credentials = ".\terraform_creds.json"
+  project     = "terraform-demo-484316"
+  region      = "europe-central2"
+}
+```
+- btw ```terraform fmt``` to format the file (indentens and stuff)
+- btw region is choosen by me --> europe-central2 = should be Warsaw
+
+... stopped at 12:51/29:13

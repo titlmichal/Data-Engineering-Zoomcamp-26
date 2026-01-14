@@ -1,1 +1,4 @@
 *.parquet
+
+*.json
+terraform_creds.json
