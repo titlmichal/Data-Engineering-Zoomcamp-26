@@ -576,6 +576,8 @@ https://registry.terraform.io/browse/providers
 
 https://www.youtube.com/watch?v=Y2ux7gq3Z0o&list=PL3MmuxUbc_hJed7dXYoJw8DoCuVHhGEQb&index=13
 
+https://github.com/DataTalksClub/data-engineering-zoomcamp/blob/main/01-docker-terraform/terraform/1_terraform_overview.md
+
 - 1st setting up service account to be used as authentication to GCP
 - service account is similar to standard account but not meant for logging in by user, but by code to be used for running stuff
 - IAM --> service accounts
@@ -598,7 +600,6 @@ https://www.youtube.com/watch?v=Y2ux7gq3Z0o&list=PL3MmuxUbc_hJed7dXYoJw8DoCuVHhG
 
 ### terraform file
 
-
 - install terraform according to this: https://github.com/DataTalksClub/data-engineering-zoomcamp/blob/main/01-docker-terraform/terraform/windows.md
 - add terraform to PATH: https://gist.github.com/nex3/c395b2f8fd4b02068be37c961301caa7 (advanced system settings - envi variables - add path to the terraform.exe directory)
 - create ```main.tf```
@@ -614,12 +615,86 @@ terraform {
 }
 
 provider "google" {
-  credentials = ".\terraform_creds.json"
+  credentials = "./terraform_creds.json"
   project     = "terraform-demo-484316"
   region      = "europe-central2"
 }
 ```
 - btw ```terraform fmt``` to format the file (indentens and stuff)
 - btw region is choosen by me --> europe-central2 = should be Warsaw
+- terraform will look for credentials file with certain name resembling credentials but to be safe: credentials = ```".\terraform_creds.json"```
 
-... stopped at 12:51/29:13
+#### Init
+
+- ```terraform init``` = gets me provider (= the code needed for terrafrom to connect and talk to GCP) ... sorts of the path/door to GCP
+- --> created a file called ```.terraform.lock.hcl```
+
+- now I want to create/use a bucket in GCP storage: https://registry.terraform.io/providers/hashicorp/google/4.72.1/docs/resources/storage_bucket
+```
+resource "google_storage_bucket" "auto-expire" {
+  name          = "terraform-demo-484316-terra-bucket"
+  location      = "EU"
+  force_destroy = true
+
+  lifecycle_rule {
+    condition {
+      age = 1
+    }
+    action {
+      type = "AbortIncompleteMultipartUpload"
+    }
+  }
+}
+```
+- after ```resource``` goes the name - important --> WHAT KIND of RESOURCE to ceate
+- after that its VARIABLE name ("demo-bucket"), local (not needed to be globally unique)  --> to distinguish between them --> then will be referred to as ```google_storage_bucket.demo-bucket```
+- ```name          = "terraform-demo-484316-terra-bucket"``` needs to be unique across ALL GCP --> usually project name is unique
+- ```lifecycle_rule``` one of possible configurations blocs (this type ```type = "AbortIncompleteMultipartUpload"``` specifies that if partitioned/chunk load files, previously uploaded data will be deleted, bcs they could be useless)
+- ```age``` of lifecycle is in days (see docs) --> here if the load didnt finish in day => remove uploaded data
+
+#### Plan
+
+- ```terraform plan``` = terraform will tell me whats about to do and details of those actions (e.g. create bucker: id, location, name, url, ...)
+- btw I was having issues with the credentials bcs I used ```".\terraform_creds.json"``` instead of ```"./terraform_creds.json"``` bcs HCL (terraform langugae) understands ```\``` as escape character (in this case, tf understood its json file bcs of the ```.```)
+
+#### Apply (this is considered deployment)
+
+- ```terraform apply``` = deploys the infra according the plan
+- file ```terraform.tfstate``` (and ```terraform.tfstate.lock.info``` temporarily) is created 
+- I had to put this into the tf file in bucket resource section ```uniform_bucket_level_access = true``` bcs GCP now requires that
+- uniform bucket level access = data is accessed via GCP IAM (= roles), not for each file --> easier to audit and prevent leaks (e.g. when I would leave some file public)
+- and now the bucket IS THERE
+
+- now whats in now the difference in ```.tfstate file?```
+- well, what cmd wrote: google_storage_bucket.demo-bucket: Creation complete after 3s [id=terraform-demo-484316-terra-bucket]
+- --> there is a new bucket on GCP terraform knows as "demo-bucket" ... and many other info
+
+#### Destroy
+
+- ```terraform destroy``` = deletes everything created, according to the tf file and tfstate file 
+- now the tfstate is almost empty, just some basic and ```"resources": []```
+- BUT there is now ```terraform.tfstate.backup``` --> it knows the config history
+
+- next video: bigger project, variables, abstract values from variable file (to be reused)
+
+#### gitignore
+
+- find it and use it!
+
+#### SUMMARY
+
+- tf is state machine = uses tf file to do stuff BUT important is .tfstate file
+- tfstate stores history --> do NOT change manually
+- workflow: init (gets providers) --> plan (shows plan, compares tfstate and realy) --> apply (do stuff and change reality)
+- provider = binary code read by HCL that sends API (REST) to google (in this case)
+- upcoming: variables.tf to make it nice and usable for dev, test and prod envis
+
+## Terraform variables (course video)
+
+https://www.youtube.com/watch?v=PBi0hHjLftk&list=PL3MmuxUbc_hJed7dXYoJw8DoCuVHhGEQb&index=14
+
+https://github.com/DataTalksClub/data-engineering-zoomcamp/tree/main/01-docker-terraform/terraform/terraform
+
+- ...
+
+...stopped at 00:01/24:09
