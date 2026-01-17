@@ -1,21 +1,21 @@
 terraform {
   required_providers {
     google = {
-      source = "hashicorp/google"
+      source  = "hashicorp/google"
       version = "7.16.0"
     }
   }
 }
 
 provider "google" {
-    credentials = "./terraform_creds.json"
-    project     = "terraform-demo-484316"
-    region      = "europe-central2"
+  credentials = file(var.credentials)
+  project     = var.project
+  region      = "europe-central2"
 }
 
 resource "google_storage_bucket" "demo-bucket" {
-  name          = "terraform-demo-484316-terra-bucket"
-  location      = "EU"
+  name          = var.gcp_bucket_name
+  location      = var.location
   force_destroy = true
 
   uniform_bucket_level_access = true
@@ -28,4 +28,10 @@ resource "google_storage_bucket" "demo-bucket" {
       type = "AbortIncompleteMultipartUpload"
     }
   }
+}
+
+resource "google_bigquery_dataset" "demo-dataset" {
+  dataset_id                 = var.bq_dataset_name
+  location                   = var.location
+  delete_contents_on_destroy = true
 }

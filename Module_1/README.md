@@ -680,6 +680,7 @@ resource "google_storage_bucket" "auto-expire" {
 #### gitignore
 
 - find it and use it!
+- but ```.terraform.lock.hcl should stay for reproducibility as it stores versions```
 
 #### SUMMARY
 
@@ -695,6 +696,47 @@ https://www.youtube.com/watch?v=PBi0hHjLftk&list=PL3MmuxUbc_hJed7dXYoJw8DoCuVHhG
 
 https://github.com/DataTalksClub/data-engineering-zoomcamp/tree/main/01-docker-terraform/terraform/terraform
 
-- ...
+- refresher: init --> plan --> apply --> destroy
+- lets do something more interesting now: bigquery dataset (https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_dataset)
+- --> do ctrl + F and find ```Required``` in the docs --> with no extra blocks, only the the ```dataset_id``` is required
+- ...BUT e.g. ```location``` is optional and by default ```US``` which I might not need
+```
+resource "google_bigquery_dataset" "demo-dataset" {
+  dataset_id = "demo_dataset"
+  location   = "EU"
+  delete_contents_on_destroy = true
+}
+```
+- (dont forget ```terraform fmt```)
+- again, in ```"google_bigquery_dataset" "demo-dataset"```, the ```"google_bigquery_dataset"``` is resource type/name and ```"demo-dataset"``` is resource block name in terraform to use it
+- ```delete_contents_on_destroy``` = if there are tables in the dataset and this is false => will fail to delete
 
-...stopped at 00:01/24:09
+### Variables
+
+https://developer.hashicorp.com/terraform/language/values/variables
+
+- very handy, will create convention named file ```variables.tf``` file and will use the variables in other files
+```
+variable "location" {
+    description = "Location to be used when creating resources"
+    default = "EU"
+}
+```
+- pretty simple --> then refer to in other tf files as ```var.var_name```, e.g.:
+```
+resource "google_bigquery_dataset" "demo-dataset" {
+  dataset_id                 = var.bq_dataset_name
+  location                   = var.location
+  delete_contents_on_destroy = true
+}
+```
+
+- terraform has functions ... wooow (https://developer.hashicorp.com/terraform/language/functions)
+- one of them: ```file()``` (https://developer.hashicorp.com/terraform/language/functions/file)
+- accepts string as a path to credentials file, reads the contents and returns it as a string
+- BUT I can NOT call functions within the vars file --> have to put in the main.tf: ```credentials = file(var.credentials)```
+- (bcs even docs dont recommend using dynamic local files)
+
+### What to look further at?
+
+- tf var files = allows for different var files when running terraform apply

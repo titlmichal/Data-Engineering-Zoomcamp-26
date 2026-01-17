@@ -3,7 +3,6 @@
 # ... for obvious reasons
 *.json
 terraform_creds.json
-.terraform.lock.hcl
 
 # taken from https://github.com/github/gitignore/blob/main/Terraform.gitignore
 # Local .terraform directories
