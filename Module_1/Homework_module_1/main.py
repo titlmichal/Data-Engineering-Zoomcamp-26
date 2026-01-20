@@ -1,7 +1,5 @@
 import pyarrow
 import pandas as pd
-import click
-from tqdm import tqdm
 from sqlalchemy import create_engine
 
 def main():
