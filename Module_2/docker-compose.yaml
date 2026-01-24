@@ -60,7 +60,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # - /tmp/kestra-wd:/tmp/kestra-wd
       - kestra_wd:/tmp/kestra-wd
+    env_file: 
+      - .env_encoded # ADDING FOR USING GCP CREDENTIALS AS SECRET
     environment:
+      SECRET_MYSECRET: dGVzdDEyMw== # ADDING AS TEST THAT IF IT FETCHES DATA CORRECTLY
       KESTRA_CONFIGURATION: |
         datasources:
           postgres:

@@ -4,6 +4,9 @@
 *.json
 terraform_creds.json
 
+# kestra/gcp
+.env_encoded
+
 # taken from https://github.com/github/gitignore/blob/main/Terraform.gitignore
 # Local .terraform directories
 .terraform/
