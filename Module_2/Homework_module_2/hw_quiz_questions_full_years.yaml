@@ -1,0 +1,68 @@
+id: hw_quiz_questions_full_years
+namespace: zoomcamp
+
+inputs:
+  - id: taxi
+    type: SELECT
+    displayName: Select taxi type
+    values: [yellow, green]
+    defaults: green
+
+variables:
+  GCP_PROJECT_ID: "kestra-demo-485310"
+  GCP_BUCKET_NAME: "kestra-demo-485310-homework-bucket"
+  GCP_DATASET: "zoomcamp"
+  GCP_LOCATION: "europe-central2"
+  file: "{{inputs.taxi}}_tripdata_{{trigger.date | date('yyyy-MM')}}.csv"
+  gcs_file: "gs://{{render(vars.GCP_BUCKET_NAME)}}/{{vars.file}}"
+  table: "{{vars.GCP_DATASET}}.{{inputs.taxi}}_tripdata_{{trigger.date | date('yyyy_MM')}}"
+  data: "{{outputs.extract.outputFiles[inputs.taxi ~ '_tripdata_' ~ (trigger.date | date('yyyy-MM')) ~ '.csv']}}"
+
+tasks:
+  - id: gcp_service_account
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_CREDS
+    kvType: STRING
+    value: "{{ secret('GCP_SERVICE_ACCOUNT') }}"
+
+  - id: set_label
+    type: io.kestra.plugin.core.execution.Labels
+    labels:
+      file: "{{render(vars.file)}}"
+      taxi: "{{inputs.taxi}}"
+
+  - id: extract
+    type: io.kestra.plugin.scripts.shell.Commands
+    outputFiles:
+      - "*.csv"
+    taskRunner:
+      type: io.kestra.plugin.core.runner.Process
+    commands:
+    - wget -qO- https://github.com/DataTalksClub/nyc-tlc-data/releases/download/{{inputs.taxi}}/{{render(vars.file)}}.gz | gunzip > {{render(vars.file)}}
+    - echo "Row count in file {{render(vars.file)}}:"
+    - wc -l {{render(vars.file)}}
+
+  - id: purge_files
+    type: io.kestra.plugin.core.storage.PurgeCurrentExecutionFiles
+    description: To avoid cluttering your storage, we will remove the downloaded files
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{kv('GCP_CREDS')}}"
+      projectId: "{{vars.GCP_PROJECT_ID}}"
+      location: "{{vars.GCP_LOCATION}}"
+      bucket: "{{vars.GCP_BUCKET_NAME}}"
+
+triggers:
+  - id: green_schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 9 1 * *"
+    inputs:
+      taxi: green
+
+  - id: yellow_schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 10 1 * *"
+    inputs:
+      taxi: yellow

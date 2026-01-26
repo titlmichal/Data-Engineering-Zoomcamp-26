@@ -1,0 +1,57 @@
+id: hw_quiz_questions
+namespace: zoomcamp
+
+inputs:
+  - id: taxi
+    type: SELECT
+    displayName: Select taxi type
+    values: [yellow, green]
+    defaults: green
+
+  - id: year
+    type: SELECT
+    displayName: Select year
+    values: ["2019", "2020", "2021"]
+    defaults: "2019"
+    allowCustomValue: true
+
+  - id: month
+    type: SELECT
+    displayName: Select month
+    values: ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
+    defaults: "01"
+
+variables:
+  GCP_PROJECT_ID: "kestra-demo-485310"
+  GCP_BUCKET_NAME: "kestra-demo-485310-homework-bucket"
+  GCP_DATASET: "zoomcamp"
+  GCP_LOCATION: "europe-central2"
+  taxi: "yellow"
+  file: "{{inputs.taxi}}_tripdata_{{inputs.year}}-{{inputs.month}}.csv"
+  gcs_file: "gs://{{render(vars.GCP_BUCKET_NAME)}}/{{vars.file}}"
+  table: "{{vars.GCP_DATASET}}.{{inputs.taxi}}_tripdata_{{inputs.year}}_{{inputs.month}}"
+  data: "{{outputs.extract.outputFiles[inputs.taxi ~ '_tripdata_' ~ inputs.year ~ '-' ~ inputs.month ~ '.csv']}}"
+
+tasks:
+  - id: gcp_service_account
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_CREDS
+    kvType: STRING
+    value: "{{ secret('GCP_SERVICE_ACCOUNT') }}"
+
+  - id: set_label
+    type: io.kestra.plugin.core.execution.Labels
+    labels:
+      file: "{{render(vars.file)}}"
+      taxi: "{{inputs.taxi}}"
+
+  - id: extract
+    type: io.kestra.plugin.scripts.shell.Commands
+    outputFiles:
+      - "*.csv"
+    taskRunner:
+      type: io.kestra.plugin.core.runner.Process
+    commands:
+    - wget -qO- https://github.com/DataTalksClub/nyc-tlc-data/releases/download/{{inputs.taxi}}/{{render(vars.file)}}.gz | gunzip > {{render(vars.file)}}
+    - echo "Row count in file {{render(vars.file)}}:"
+    - wc -l {{render(vars.file)}}
