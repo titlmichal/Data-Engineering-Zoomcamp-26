@@ -1,0 +1,56 @@
+# Workshop 1_Module 2.5: 
+
+- API reading and pipeline scalability
+- data normalization and incremental loading
+- data lake with dlt
+
+... according to the main course page, the workshop about data ingestion should go between moduke 2 and 3 (https://github.com/DataTalksClub/data-engineering-zoomcamp?tab=readme-ov-file)
+- the workshop page: https://github.com/DataTalksClub/data-engineering-zoomcamp/blob/main/cohorts/2025/workshops/dlt/README.md
+- 3 parts of the workshop
+1) data extraction (with scale)
+2) data normalization (clean and structure before load)
+3) load and incremental updates
+- next steps (e.g. project inspiration) in the workshop page
+
+- now stuff below is mainly from these related sources:
+1) workshop file: https://github.com/DataTalksClub/data-engineering-zoomcamp/blob/main/cohorts/2025/workshops/dlt/data_ingestion_workshop.md
+2) the workshop video: https://www.youtube.com/watch?v=pgJWP_xqO1g
+
+# Data ingestion with dlt
+
+- building robust pipelines, following best practices and e.g. loading into datalake
+- notebook will be enough, BUT only at same point load to bq --> credentials needed there (i guess will be okay, used them before)
+
+### What is ingestion?
+
+- process of extraction data from sources --> transporting and preparing it (cleaning, normalizing, adding metadata)
+- parquet, avro, db tables, ... = well-structured with explicit schema --> can be used immediately
+- csv, json, ... = unstructured/not well defined --> cleaning and formatting 
+- schem includes format, structure, types, relationships, ...
+- pipelines are here to to extract, transform and load ... basically sort this out
+- usual steps? (*DE is mostly about first 3-4)
+1) collect: data store, streams, apps, ...
+2) ingest: bulk (e.g. DB) X continuous (e.g. json from app, event queue)
+3) store: data lake (files stored as (parquet) files, cheap storage but long compute) X data warehouse (e.g. bq, ms sql) X data lakehouse (mix of the two: files stored + additional layer of metadata --> easier searching)
+4) compute: batch X stream
+5) consume: science, BI, self-service, ML
+
+- what does the DE do here:
+1) optimize data storage
+2) ensure data quality and integrity (duplicates, NAs, ...)
+3) implement governance (compliance, well-managed)
+4) adapt data architectures (to account for changing needs of organization)
+--> entire ```data lifecycle``` management
+--> this workshop: robust pipeline (collect + ingest + store) --> ETL
+
+- btw dbt is for transformation (SQL, consume part of DE) X dlt is for ingestions (collect and ingest part of DE)
+
+## Extracting data
+
+- 99 % of data in DE is from DBs, APIs or files --> workshop is about APIs --> least structured but most common
+- 3 common types of APIs
+1) RESTful
+2) file-based
+3) database APIs
+
+... stopped at 13:12/1:30:54
