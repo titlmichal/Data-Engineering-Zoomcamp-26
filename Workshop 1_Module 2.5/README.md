@@ -89,7 +89,27 @@ print(result[:2])
 3) pagination
 - APIs dont return all data once --> chunks or pages of results
 - to get all --> multiple iterative requests
-- see example in ```examples.ipynb```
-4) memory issues during extraction
+- see example in ```examples.ipynb``` (or sample below of it)
+```python
+page_nr = 1
+while True:
+    params = {"page": page_nr}
+    response = requests.get(URL, params=params)
+    page_data = response.json()
 
-... stopped at 21:39/1:30:54
+    # empty page = no data anymore
+    if not page_data:
+        break
+
+    print(page_data)
+    page_nr += 1
+```
+- each API is designed carefully --> pagination can be different --> adjust accordingly
+4) memory issues during extraction
+- limited memory in pipelines, e.g. serveless (e.g. lambda) functions or shared clusters
+- --> solution: batch processing/streaming data
+- choosing the batch size to avoid memory overflowing
+- e.g. APIs to files, webhooks to event queues, queues to buckets
+- see example in ```examples.ipynb``` (or sample below of it)
+
+... stopped at 27:34/1:30:54
