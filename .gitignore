@@ -45,3 +45,7 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# the db stuff from dlt workshop is mostly messy/examples, so not really needed
+*.db
+*.duckdb

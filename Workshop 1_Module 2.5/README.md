@@ -111,5 +111,236 @@ while True:
 - choosing the batch size to avoid memory overflowing
 - e.g. APIs to files, webhooks to event queues, queues to buckets
 - see example in ```examples.ipynb``` (or sample below of it)
+```python
+def paginater():
+    page_nr = 1
+    while True:
+        params = {"page": page_nr}
+        try:
+            response = requests.get(URL, params=params)
+            response.raise_for_status() # if 200-299 => nothing, if 4xx or 5xx => error risen + details
+            response = response.json()
+            print(f"Got page {page_nr} with {len(response)} records.")
 
-... stopped at 27:34/1:30:54
+            if response:
+                yield response  # WHATS THIS AND WHY?
+                page_nr += 1
+            else:
+                break
+        except Exception as e:
+            print(e)
+            break
+
+for page_data in paginater():
+    print(page_data)
+    break
+```
+- this ```yield response``` changes the function into ```generator``` --> when ```yield``` is reached in the function, its "paused" and data is returned
+- --> if it was simple ```return``` I would have to save all pages into one one object --> with this, I can iterate one by one to e.g. load into DWH
+- --> at one point: only one page in memory
+- --> easy memory management X low throughput (e.g. bcs rate limits or response time)
+- --> dlt can simply this while keeping good perfomance
+
+## Extracting data with dlt
+
+- custom scripts deal with pagination, rate limits, auth, errros, ... --> dlt simplies this with a built-in REST API client
+- --> built in REST API support, auto pagination handling, rate limits and retries management, streaming support, seamless integration
+- dlt is open-source working in 3 steps: extract, normalize, load
+- helps with moving data from many sources (incl REST APIs) to many destination
+- just need to do ```pip install dlt``` (or ```uv add dlt``` or even ```uv add dlt[duckdb]``` to get dlt with duckdb as destination)
+- btw duckDB is lightweight DB that can be spin up in local machine memory
+```python
+import dlt
+from dlt.sources.helpers.rest_client import RESTClient # this CLIENT helps with the challenges with standard approaches (RAM, rates, ...)
+from dlt.sources.helpers.rest_client.paginators import PageNumberPaginator
+
+def paginated_getter():
+    client = RESTClient(
+        base_url="https://us-central1-dlthub-analytics.cloudfunctions.net", # same as above
+        # Define pagination strategy - page-based pagination (but there are others)
+        paginator=PageNumberPaginator(   # <--- Pages are numbered (1, 2, 3, ...)
+            base_page=1,   # <--- Start from page 1
+            total_path=None    # <--- No total count of pages provided by API, pagination should stop when a page contains no result items
+        )
+    )
+
+    # the paginate function uses the endpoint (it already knows base url from above)
+    for page in client.paginate("data_engineering_zoomcamp_api"):    # <--- API endpoint for retrieving taxi ride data
+        yield page   # remember about memory management and yield data (again, will give one interation and then pause)
+
+
+for page_data in paginated_getter():
+    print(page_data)
+    break
+```
+- --> no iteration for pagination was needed
+- --> if there was a limit error --> dlt would wait and try when possible
+- (dlt can read ```retry_after``` from headers, sometimes even ```pagination counters``` or similar)
+- btw Kafka can be used as simple ingestion tool too but more likely to be a source
+- btw I can use dlt to extract to even local files (csv, parquet, ...)
+- ...generally its quite universal (e.g. sometimes GCP bigquery can be source, sometimes destination) --> check ```dlt docs``` for main sources (rest, dbs and clouds) + they have ```verified-sources```
+
+## Normalizing data
+
+- 1) normalizing = putting a schema and structurue to them w/o change of meaning (about this is mostly the workshop)
+- 2) filtering for given use case = usually for given analysis
+- ... can be called ```data cleaning``` in general
+- --> big part of it: ```metadata work``` (giving data structure and standard) = adding types, renaming columns, flattenning nested dicts, unnesting into child tables, ... (bcs of naming conventions in DWH, DBs tables relationships, ...)
+- why to do this and not use JSON directly? its good for data transfer BUT NO: enforced schema, consistent data types, hard to process at once, heavy for memory, slow for analysis (X e.g. parquet) --> GOOD for exchange X BAD for direct analysis
+- the NYC data from the API is already normalized (by the workshop creators) but initially it wasnt:
+- e.g. before:
+```
+"coordinates": {
+    "start": {"lat": 40.641525, "lon": -73.787442},
+    "end": {"lat": 40.742963, "lon": -73.980072}
+}
+```
+- and now:
+```
+{'End_Lat': 40.742963,
+ 'End_Lon': -73.980072,
+    ...
+ 'Start_Lat': 40.641525,
+ 'Start_Lon': -73.787442,
+    ...}
+```
+- AND dlt does quite a lot of things automatically:
+1) detects schema (data types)
+2) flattens nested JSON (complex into table-ready format)
+3) handles data type conversions (e.g. dates, nrs, bools, ...)
+4) splits lists into child tables (ensures relational integrity)
+5) adapts to schema changes over time (will be covered LATER)
+- HOW to do it MYSELF:
+```python
+import dlt
+
+# 1) DEFINE PIPELINE FOR AUTO NORMALIZATION
+pipeline = dlt.pipeline(
+    pipeline_name="taxi_example",
+    destination="duckdb",
+    dataset_name="taxi"
+)
+print(pipeline)
+
+# 2) RUN THE PIPELINE WITH RAW NESTED DATA
+info = pipeline.run(data=data, table_name="rides", write_disposition="replace")
+    # --> .duckdb file is created/changed
+
+# 3) PRINT THE RESULT SUMMARY
+print(info)
+```
+- usually the data is some kind of resource (in this example its just basic dict with some nesting)
+- check below for more what happened behind:
+```python
+print(pipeline.last_trace)
+```
+- metadata of the extraction: how long it took, what has it done etc.
+- now check the final dataset:
+```python
+import pandas
+pipeline.dataset().rides.df()
+```
+- dataset() method + which table + make it into df
+- or check the columns ```pipeline.dataset().rides.df().columns```
+- it also included some columns starting with ```_``` --> internal system columns with ids
+- PLUS the second table that was created ```pipeline.dataset().rides__passengers.df()```
+- BTW if using multiple sources, check docs and map function (BUT dlt doesnt recommend to load multiple sources into one table)
+- BTW the data types are first transformed to internal ones and then to the ones according to the target destination (see docs)
+- BTW it can show sort of UI via ```dlt.pipeline.show()``` (in .py file) --> spins of ```streamlit``` app with the pipeline, tables, etc.
+
+## Loading data
+
+- w/o dlt:
+1) schema validation
+2) batch processing
+3) error handling
+4) retries etc.
+5) plus the stanard: connection, table creation and schemas, writting queries, ...
+```python
+# LOADING DATA WITHOUT DLT
+import duckdb
+
+# 1) CREATING CONNECTION TO IN-MEMORY DUCKDB
+conn = duckdb.connect("taxi_manual.db")
+
+# 2) CREATE A TABLE
+conn.execute("""
+CREATE TABLE IF NOT EXISTS rides (
+    record_hash TEXT PRIMARY KEY,
+    vendor_name TEXT,
+    pickup_time TIMESTAMP,
+    dropoff_time TIMESTAMP,
+    start_lon DOUBLE,
+    start_lat DOUBLE,
+    end_lon DOUBLE,
+    end_lat DOUBLE
+);
+"""
+)
+
+# 3) INSERT DATA MANUALLY
+data = [
+    {
+        "vendor_name": "VTS",
+        "record_hash": "b00361a396177a9cb410ff61f20015ad",
+        "time": {
+            "pickup": "2009-06-14 23:23:00",
+            "dropoff": "2009-06-14 23:48:00"
+        },
+        "coordinates": {
+            "start": {"lon": -73.787442, "lat": 40.641525},
+            "end": {"lon": -73.980072, "lat": 40.742963}
+        }
+    }
+]
+# FLATTEN FOR INSERTION
+flattened_data = [
+    (
+        ride["record_hash"],
+        ride["vendor_name"],
+        ride["time"]["pickup"],
+        ride["time"]["dropoff"],
+        ride["coordinates"]["start"]["lon"],
+        ride["coordinates"]["start"]["lat"],
+        ride["coordinates"]["end"]["lon"],
+        ride["coordinates"]["end"]["lat"]
+    )
+    for ride in data
+]
+#ACTUAL INSERT
+conn.executemany("""
+INSERT INTO rides (record_hash, vendor_name, pickup_time, dropoff_time, start_lon, start_lat, end_lon, end_lat)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+""", flattened_data)
+
+print("Load was a success!")
+
+# 4) QUERY THE DATA
+conn.execute("SELECT * FROM rides").df()
+
+# 5) CLOSE THE CONNECTION
+conn.close()
+```
+- --> schema management is manual
+- --> no auto retries if it fails
+- --> no incremental loading
+- --> more code to maintain
+
+
+- with dlt?
+- as mentioned above mostly:
+1) multiple destinations
+2) performance optmized (batch, parallelism, streaming)
+3) schema-aware (checks it matches destinations requirements)
+4) incremental load (--> only new/failed/updated to be inserted)
+5) resilience and retries (--> loads data w/o missing records)
+- --> if load FINISHED => data was loaded FULLY --> can be trusted
+- how to do it myself?
+```python
+...
+```
+
+
+
+
+... stopped at 1:01:16/1:30:54
