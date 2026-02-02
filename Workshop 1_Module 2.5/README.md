@@ -337,10 +337,138 @@ conn.close()
 - --> if load FINISHED => data was loaded FULLY --> can be trusted
 - how to do it myself?
 ```python
-...
+@dlt.resource(name="rides")   # <--- The name of the resource (will be used as the table name)
+def ny_taxi():
+    client = RESTClient(
+        base_url="https://us-central1-dlthub-analytics.cloudfunctions.net",
+        paginator=PageNumberPaginator(
+            base_page=1,
+            total_path=None
+        )
+    )
+    for page in client.paginate("data_engineering_zoomcamp_api"):    # <--- API endpoint for retrieving taxi ride data
+        yield page   # <--- yield data to manage memory
+
+# define new dlt pipeline
+pipeline = dlt.pipeline(destination="duckdb")
+
+# run the pipeline with the new resource
+load_info = pipeline.run(ny_taxi, write_disposition="replace")
+print(load_info)
 ```
+- it uses ```decorator```: ```@dlt.resource(name="rides")```
+- --> it creates a resource object out of the ny_taxi() function
+- --> so instead of ```pipeline.run(data=data, table_name="rides")``` I can do ```pipeline.run(ny_taxi)```
+- --> basically Im now telling it the ny_taxi() is a resource of table ```rides```
+- --> from ```generator``` the fun becomes a ```DltResource``` object
+- --> can be reused in any other pipeline now
+- ... rest is the same as previously w/o the decorator/resource object
+- then we can explore the (already flattened) data via ```pipeline.dataset().rides.df()```
+
+## Incremental loading
+
+- when we want to load only new data/records/changed ones, not all
+- ```incremental extraction``` = only extract new or modified data then retrieving all
+- ```state tracking``` = keeps track of what was already loaded
+- --> in dlt ```state``` is stored in separate table (name like ```_dlt...```) in destination --> pipelines can track
+- --> dlt provides 2 incremental loading methods:
+1) append = adding new records at the end of the table (good for immutable/stateless data - they happened and cant change, e.g. taxi rides) + keeps full change history
+2) merge = updates existing records (for stateful data - e.g. client data), merging existing with new 
+- how to use the incremental features of dlt?
+- --> ```.incremental(column, initial_value)``` method
+```python
+cursor_date = dlt.sources.incremental("Trip_Dropoff_DateTime", initial_value="2009-06-15")
+```
+- --> which columns to use for telling whether its new or old + whats the value to start with
+- --> this cursor_date is part of the ```dlt source object``` in definition of the resource
+```python
+@dlt.resource(name="rides", write_disposition="append")
+def ny_taxi(
+    cursor_date=dlt.sources.incremental(
+        "Trip_Dropoff_DateTime",   # <--- field to track, our timestamp
+        initial_value="2009-06-15",   # <--- start date June 15, 2009
+        )
+    ):
+    client = RESTClient(
+        base_url="https://us-central1-dlthub-analytics.cloudfunctions.net",
+        paginator=PageNumberPaginator(
+            base_page=1,
+            total_path=None
+        )
+    )
+
+    for page in client.paginate("data_engineering_zoomcamp_api"):
+        yield page
+```
+- btw the ```print(pipeline.last_trace)``` then reveals that there is the final table + the ```_dlt_pipeline_state``` table with states of loads
+- running it AGAIN => no new data loaded bcs dlt knows its already loaded
+- to check the results:
+```python
+with pipeline.sql_client() as client:
+    res = client.execute_sql(
+            """
+            SELECT
+            MIN(trip_dropoff_date_time)
+            FROM rides;
+            """
+        )
+    print(res)
+```
+- btw dlt doesnt remove stuff from the target/source, BUT it has the ```scd2``` (slowly changing dimensions) --> allows to set ```valid_from``` and ```valid_to``` (see the docs)
+
+## Loading data into BigQuery or Data Lake (e.g. bucket in GCS)
+
+- adding bigquery dlt --> e.g. ```uv add dlt[bigquery]```
+- resource definition stays the same, but pipeline is different
+```python
+pipeline = dlt.pipeline(
+    pipeline_name='taxi_data',
+    destination='bigquery',
+    dataset_name='taxi_rides',
+)
+```
+- AND also a setup of CREDENTIALS IS NEEDED (the way depends on the environment)
+```python
+os.environ["DESTINATION__BIGQUERY__CREDENTIALS"] = ... #file with credentials
+```
+- ... then run it as others --> data is loaded + the internal ```_dlt_...``` tables (loads, pipeline_state, version)
+- --> schema is auto adapted to bigquery
+- --> partitioning/clustering can be used
+- --> batch loading ensures scale
 
 
+- btw datalake is generally bunch of parquet file (local or in cloud, e.g. S3)
+- very cost-effective for storage
+- optimized for big data: works with spark, databricks (btw databricks is lakehouse architecture)
+- easy scale
+- I would be needing to tell the destination of the bucket (this is local btw)
+```python
+os.environ["BUCKER_URL"] = "/content"
+```
+- THEN define the source as above
+- AND run the pipeline
+```python
+pipeline = dlt.pipeline(
+    pipeline_name='fs_pipeline',
+    destination='filesystem', # changed destination to 'filesystem'
+    dataset_name='fs_data',
+)
 
-
-... stopped at 1:01:16/1:30:54
+load_info = pipeline.run(ny_taxi, loader_file_format="parquet") # <--- choose a file format: parquet, csv or jsonl
+print(load_info)
+```
+- BUT for using data lakes --> NEED to STRUCTURE them WELL --> table formats like ```Delta``` or ```Iceberg```
+- --> they add metadata to provide this structure for later use
+- --> dlt can provide them (via ```deltalake``` and ```pyiceberg``` libs) during extraction and normalization (created as parquet --> exposed as ```Arrow``` data structure --> fed into deltalake or pyiceberg)
+- need to add respective dlt package --> ```uv add dlt[pyiceberg]```
+- and then just switch the ```table_format``` in the ```pipeline.run()``` part:
+```python
+load_info = pipeline.run(
+    ny_taxi,
+    loader_file_format="parquet", # bcs iceberg is parquet plus metadata
+    table_format="iceberg",  # here I pick the table format for the data lake
+)
+print(load_info)
+```
+...
+- this workshop covered REST API resource approach, but for other sources --> see ```docs```
