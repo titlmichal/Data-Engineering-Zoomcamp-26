@@ -1,0 +1,52 @@
+id: gcp_yellow_taxi_2024
+namespace: zoomcamp
+
+variables:
+  GCP_PROJECT_ID: "kestra-demo-485310"
+  GCP_BUCKET_NAME: "kestra-demo-485310-homework-bucket"
+  GCP_DATASET: "zoomcamp"
+  GCP_LOCATION: "europe-central2"
+  taxi: "yellow"
+  file: "{{vars.taxi}}_tripdata_{{trigger.date | date('yyyy-MM')}}.parquet"
+  gcs_file: "gs://{{render(vars.GCP_BUCKET_NAME)}}/{{vars.file}}"
+  data: "{{outputs.extract.outputFiles[render(vars.file)]}}"
+
+tasks:
+  - id: gcp_service_account
+    type: io.kestra.plugin.core.kv.Set
+    key: GCP_CREDS
+    kvType: STRING
+    value: "{{ secret('GCP_SERVICE_ACCOUNT') }}"
+
+  - id: set_label
+    type: io.kestra.plugin.core.execution.Labels
+    labels:
+      file: "{{render(vars.file)}}"
+      taxi: "{{render(vars.taxi)}}"
+
+  - id: extract
+    type: io.kestra.plugin.scripts.shell.Commands
+    outputFiles:
+      - "*.parquet"
+    taskRunner:
+      type: io.kestra.plugin.core.runner.Process
+    commands:
+    - wget -qO {{render(vars.file)}} https://d37ci6vzurychx.cloudfront.net/trip-data/{{render(vars.file)}}
+
+  - id: upload_to_gcs
+    type: io.kestra.plugin.gcp.gcs.Upload
+    from: "{{render(vars.data)}}"
+    to: "{{render(vars.gcs_file)}}"
+
+pluginDefaults:
+  - type: io.kestra.plugin.gcp
+    values:
+      serviceAccount: "{{kv('GCP_CREDS')}}"
+      projectId: "{{vars.GCP_PROJECT_ID}}"
+      location: "{{vars.GCP_LOCATION}}"
+      bucket: "{{vars.GCP_BUCKET_NAME}}"
+
+triggers:
+  - id: yellow_schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 9 1 * *"

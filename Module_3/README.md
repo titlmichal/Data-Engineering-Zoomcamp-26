@@ -114,3 +114,68 @@ SELECT * FROM `kestra-demo-485310.zoomcamp.external_green_tripdata`;
 ## Partioning and Clustering in detail
 
 - YT video: https://www.youtube.com/watch?v=-CqXf7vhhDs&list=PL3MmuxUbc_hJed7dXYoJw8DoCuVHhGEQb&index=25
+- BQ partition
+    - multiple different columns types accepted: time-unit based, integer range
+    - if time, daily is default, but hourly or monthly or yearly possible
+    - partition limit is 4000
+    - partition column can by only one
+- BQ clustering
+    - order of column is important (like order by)
+    - improves filter queries and aggregation queries
+    - table with size below 1 GB dont benefit, BUT actually will cost more (bcs metadata reading is needed for partitioned/clustered table)
+    - up to 4 clustering columns possible (many data types)
+- comparison
+    - unknown benefit of clustering X upfront know for partitioning
+    - filters/aggregations againts multiple columns X filter/aggregations on single column
+    - when granularity of partition is not enough --> clustering
+    - when needing to manage (move, delete, edit) single partitions --> partitioning
+- when clustering over partitioning?
+    - if partitions would be really small (e.g. below 1 GB per partition)
+    - partitions would reach the 4000 limit
+    - if partitioning would mean repartitioning often (e.g. every few minutes) bcs data/all partitions change
+- automatic reclustering
+    - new incoming data are written into new blocks with keys that overlap with existing keys of previous clusters
+    - e.g. new data dont fall in the same way as old did --> weaker sort property of the table
+    - --> BQ does auto reclustering in background
+    - --> for partitioned table, clustering is maintained within each partition (also automatically)
+    - ...its done w/o a cost to the user
+
+## BiqQuery Best Practices
+
+- YT video: https://www.youtube.com/watch?v=k81mLJVX08w&list=PL3MmuxUbc_hJed7dXYoJw8DoCuVHhGEQb&index=26
+- cost reduction
+    - avoid ```SELECT * ``` (bcs BQ stores data in column way)
+    - price queires before running (like the estimation of queried storage)
+    - use clustered and/or partitioned tables
+    - use ```streaming``` inserts with caution
+    - materialize queries (e.g. using CTE in multiple places --> materialize)
+- query performance
+    - filter on partitioned/clustered columns
+    - denormalize data
+    - do not overuse external data source
+    - reduce data before joining
+    - do not treat ```WITH``` clauses as prepared statements
+    - avoid oversharding
+    - avoid JS user-defined functions
+    - use approx aggregation functions (rather than complete one like HyperLogLog++)
+    - ```ORDER``` statement should be last in the whole query
+    - as best practice, place the table with the most rows first --> follow with the fewest row one --> continue with decreasing order (2nd most rows, 3rd, ...)
+
+## Internals of BigQuery
+
+- YT video: https://www.youtube.com/watch?v=eduHi1inM4s&list=PL3MmuxUbc_hJed7dXYoJw8DoCuVHhGEQb&index=27
+- BQ saves our data into ```Colossus``` - cheap columnar storage
+- --> seperated storage and compute --> cheaper
+- but how does storage and compute communicate then?
+- --> ```jupiter network``` = network within BQ datacenters, cca 1 TB/s
+- ```Dremel``` = query execution engine
+    - seperates each query into 3 parts
+    - optimized so the nodes can run the parts at once
+- how the dremel process query:
+1) gets a query
+2) breaks down into subqueries (basically unions)
+3) they (the modified queires) go into mixers
+4) these mixers break them done into leaf nodes
+5) these leaf nodes do the actual communication with Colossus
+6) Coluss returns data and through leaf nodes it goes back to root server
+- column-oriented helps with better aggregations and speed (we usually dont query all columns at once)
