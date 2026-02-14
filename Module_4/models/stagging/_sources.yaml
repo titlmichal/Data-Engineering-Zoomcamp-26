@@ -1,0 +1,10 @@
+version: 1
+
+sources:
+  - name: raw_data
+    description: "Raw data for NYC taxi"
+    database: kestra-demo-485310
+    schema: zoomcamp
+    tables:
+      - name: yellow_tripdata
+      - name: green_tripdata
