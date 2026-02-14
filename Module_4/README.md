@@ -143,9 +143,140 @@
     - rather dirty/quick fix/one time/testing feature, but when I want a csv file as a table/data model in DWH, this is the way
     6) ```snapshots```
     - as name suggests, takes a snapshot of given table/data model and its values
-    - next time the snapshot is run, extra row is added for the new value
+    - next time the snapshot is run, extra row is added for the new value (X instead of overwritting it)
     - not best to be used in dbt (rather better in source), but its there
     7) ```tests```
+    - many ways to tests in dbt, but this one is place for SQL file considered as assertions
+    - e.g. we want timestamp per each hour --> checking that there is always 24hrs per given day of data
+    - if query returns 0 rows => FAIL (```dbt build``` command fails)
+    - aka singular tests
     8) ```models```
+    - most important directory, here is the SQL (or even Python) logic
+    - generally suggested 3 subdirectories: stagging --> intermediate --> marts
+    - ```stagging``` = SQL sources, raw tables, 1:1 copy of data w/o cleaning
+    - ```intermediate``` = not raw, not end user data ... (more complex joins, logics, ...)
+    - ```marts``` = data for end users/ready for consumption, cleaned and modelled
+    - ... these are dbt recommendations, but its up to me --> e.g. bronze/silver/gold
 
-... stopped at 11:39/20:22
+# dbt Sources
+
+- YT link: https://www.youtube.com/watch?v=7CrrXazV_8k
+- sources = tells dbt where the data is
+- ```models``` directory --> creating ```stagging``` subdirectory
+- creating there ```_sources.yaml``` file
+```yaml
+version: 1
+
+sources:
+  - name: raw_data
+    description: "Raw data for NYC taxi"
+    database: kestra-demo-485310
+    schema: zoomcamp
+    tables:
+      - name: yellow_tripdata
+      - name: green_tripdata
+```
+- the ```database```, ```schema``` and ```tables``` HAVE to match the GCP setup
+- ```database``` is the GCP project id, ```schema``` is the dataset name
+- ```raw_data``` is the name of this specific source
+- now the actual stagging model --> creatin ```stg_green_tripdata.sql``` file there
+```SQL
+select * 
+from {{ source("raw_data", "green_tripdata")}}
+```
+- its using the jinja code block (see the ```{{ }}```) and source function in there (1st arg is source name, 2nd is table)
+- now I can ```preview``` or ```build``` (just running it fails, bcs there is too much data to be shown - bcs of the ```bytes billed``` limit I set before --> changing)
+- it would make sense to do the cosmetic changes here: column selection, renaming/aliasing, type casting, ...
+```SQL
+ select
+        -- identifiers
+        cast(vendorid as integer) as vendor_id,
+        {{ safe_cast('ratecodeid', 'integer') }} as rate_code_id,
+        cast(pulocationid as integer) as pickup_location_id,
+        cast(dolocationid as integer) as dropoff_location_id,
+
+        -- timestamps
+        cast(lpep_pickup_datetime as timestamp) as pickup_datetime,  -- lpep = Licensed Passenger Enhancement Program (green taxis)
+        cast(lpep_dropoff_datetime as timestamp) as dropoff_datetime,
+
+        -- trip info
+        cast(store_and_fwd_flag as string) as store_and_fwd_flag,
+        cast(passenger_count as integer) as passenger_count,
+        ...
+        cast(improvement_surcharge as numeric) as improvement_surcharge,
+        cast(total_amount as numeric) as total_amount,
+        {{ safe_cast('payment_type', 'integer') }} as payment_type
+    from source
+    -- Filter out records with null vendor_id (data quality requirement)
+    where vendorid is not null
+```
+- now it would make sense to use CTEs for better overview:
+```SQL
+with 
+source as (
+select 
+    *
+from {{ source("raw_data", "green_tripdata")}}
+),
+
+renamed as (
+    select
+        -- identifiers
+        cast(vendorid as integer) as vendor_id,
+        {{ safe_cast('ratecodeid', 'integer') }} as rate_code_id,
+        cast(pulocationid as integer) as pickup_location_id,
+        ...
+        cast(improvement_surcharge as numeric) as improvement_surcharge,
+        cast(total_amount as numeric) as total_amount,
+        {{ safe_cast('payment_type', 'integer') }} as payment_type
+    from source
+    -- Filter out records with null vendor_id (data quality requirement)
+    where vendorid is not null
+)
+
+select * from renamed
+```
+- ...doing similar thing for ```stg_yellow_tripdata.sql``` (though its too big to preview)
+
+## dbt Models
+
+- YT link: https://www.youtube.com/watch?v=JQYz-8sl1aQ
+- up until now I could do this by myself only (if it was real) --> now I need to not only explore but also discuss with business
+- where next? --> start thinking what I want to build as a mart
+- --> creating ```marts``` directory + ```reporting``` subdirectory + ```monthly_locations_revenue.sql``` file there
+- --> I want proper dimensions/dimensional model with facts in the DWH --> ```dim_vendors.sql```, ```dim_locations.sql``` and ```fct_trips.sql```
+- good modelling = simple aggreations to answer data questions
+- starting with fact table (```fct_trips.sql```) --> need to union green and yellow data --> ```intermediate``` directory + ```int_trips_unioned.sql```
+```SQL
+with green_trips as (
+    select
+        vendor_id,
+        rate_code_id,
+        pickup_location_id,
+        dropoff_location_id,
+        ...
+        'Green' as service_type
+    from {{ ref('stg_green_tripdata') }}
+),
+yellow_trips as (
+    select
+        vendor_id,
+        rate_code_id,
+        pickup_location_id,
+        dropoff_location_id,
+        ...
+        'Yellow' as service_type
+    from {{ ref('stg_yellow_tripdata') }}
+)
+select * from green_trips
+union all
+select * from yellow_trips
+```
+- it uses jinja again, this time for referencing models ```{{ ref('stg_green_tripdata') }}``` --> the ```ref()``` function is used for dbt models (```source``` is for raw sources)
+
+## dbt Seeds and Macros
+
+- YT link: https://www.youtube.com/watch?v=lT4fmTDEqVk
+- 
+
+... stopped at 0:25/12:05
