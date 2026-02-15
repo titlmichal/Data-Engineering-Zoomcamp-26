@@ -277,6 +277,217 @@ select * from yellow_trips
 ## dbt Seeds and Macros
 
 - YT link: https://www.youtube.com/watch?v=lT4fmTDEqVk
-- 
+- seeds = dbt feature allowing for manual csv (or other) uploads
+    - e.g. for testing or when not having ability to write to DWH directly
+    - lives in ```seeds``` directory --> run ```dbt seed``` in dbt core/hit ```build``` in dbt cloud
+    - --> now its available as a data model in dbt (e.g. via ```{{ ref('name_of_the_model')}}```)
+    - (!) dont commit personal data + keep data small
+    - see e.g. ```dim_zones.sql``` (previously as ```dim_locations.sql``)
+- macros = custom functions, written in SQL files
+    - see ```macros``` directory, e.g. ```get_vendor_data.sql``` or ```get_vendor_names.sql```
+    - INTERESTING thing happened: when commeting out a macro, the compile still renders it --> only part of it is commented out --> fails
+```SQL
+{% macro get_vendor_names(vendor_id) -%}
+case
+    when {{ vendor_id }} = 1 then 'Creative tech'
+    when {{ vendor_id }} = 2 then 'Verifone'
+    when {{ vendor_id }} = 4 then 'Unknown'
+end
+{%- endmacro %}
+```
+- then I can easily reference it with jinja as other stuff ```{{ get_vendor_names("vendor_id") }} as vendor_name```
+- --> will compile as:
+```
+case
+    when vendor_id = 1 then 'Creative tech'
+    when vendor_id = 2 then 'Verifone'
+    when vendor_id = 4 then 'Unknown'
+end
+```
 
-... stopped at 0:25/12:05
+## dbt Tests
+
+- YT link: https://www.youtube.com/watch?v=bvZ-rJm7uMU
+- singular tests
+    - simple (and sometimes complex) SQL queires
+    - if it runs MORE than 0 rows => FAILED test
+```SQL
+select
+    order_id,
+    sum(amount) as total_amount
+from {{ ref('fct_payments')}}
+group by all
+having sum(amount) < 0
+```
+- source freshness tests
+    - set up in ```dbt_project.yaml``` file
+    - then run a ```dbt source freshness``` command in CLI
+    - e.g. (example from docs)
+```yaml
+sources:
+  - name: jaffle_shop
+    database: raw
+    config: 
+      freshness: # default freshness
+        # changed to config in v1.9
+        warn_after: {count: 12, period: hour}
+        error_after: {count: 24, period: hour}
+      loaded_at_field: _etl_loaded_at 
+
+tables:
+      - name: orders
+        config:
+          freshness: # make this a little more strict
+            warn_after: {count: 6, period: hour}
+            error_after: {count: 12, period: hour}
+```
+- generic tests
+    - also defined in ```dbt_project.yaml``` file
+    - 4 built-in subtypes: unique, not_null, accepted_values, relationships (each value should have counter-part in defined other side)
+    - PLUS custom tables can be written as SQL/jinja (in ```tests/generic``` dir) and then referenced as built-in ones
+    - PLUS dbt community has built many of others
+    - each test is column-level = setting up tests per each column
+```yaml
+columns:
+  - name: order_id
+    tests:
+      - unique
+      - not_null
+  - name: status
+    tests:
+      - accepted_values:
+          values: ['pending', 'completed', 'cancelled']
+  - name: customer_id
+    tests:
+      - relationships:
+          to: ref('customers')
+          field: id
+```
+```SQL
+{% test test_positive_values(model, column_name) %}
+{{ config(severity = 'warn')}}
+SELECT *
+FROM {{ model }}
+WHERE {{ column_name }} <= 0
+{% endtest %}
+```
+- unit tests
+    - not that new, but not often used as well
+    - so this rather data model test, not data that much
+    - so works like: if I give you this input data, this should be the output
+```yaml
+unit_tests:
+  - name: test_is_valid_email_address
+    description: "Check my is_valid_email_address logic captures all known edge cases - emails without ., emails without @, and emails from invalid domains."
+    model: dim_customers
+    given:
+      - input: ref('stg_customers')
+        rows:
+          - {email: cool@example.com,    email_top_level_domain: example.com}
+          - {email: cool@unknown.com,    email_top_level_domain: unknown.com}
+          - {email: badgmail.com,        email_top_level_domain: gmail.com}
+          - {email: missingdot@gmailcom, email_top_level_domain: gmail.com}
+      - input: ref('top_level_email_domains')
+        rows:
+          - {tld: example.com}
+          - {tld: gmail.com}
+    expect:
+      rows:
+        - {email: cool@example.com,    is_valid_email_address: true}
+        - {email: cool@unknown.com,    is_valid_email_address: false}
+        - {email: badgmail.com,        is_valid_email_address: false}
+        - {email: missingdot@gmailcom, is_valid_email_address: false}
+```
+- model contracts
+    - so this tests whether the model (im trying to build) matches the structure underneath
+    - so the contracts guarantee that the model will be as agreed in the contract
+```yaml
+models:
+  - name: dim_customers
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: customer_id
+        data_type: int
+        constraints:
+          - type: not_null
+      - name: customer_name
+        data_type: string
+```
+- ... there are others tests but mostly more further in the pipeline (e.g. CI/CD)
+
+## dbt documentation
+
+- YT link: https://www.youtube.com/watch?v=UqoWyMjcqrA
+```yaml
+sources:
+  - name: raw_data
+    description: "Raw data for NYC taxi"
+    database: kestra-demo-485310
+    schema: zoomcamp
+    tables:
+      - name: yellow_tripdata
+        descrition: The bigger yellow dataset
+        columns:
+          - name: vendorid
+            description: ID of given vendor executing the ride
+            data_type: integer
+            meta:
+              pii: false
+              ownership: data_team
+              importance: high
+```
+- ```meta``` section is for internal uses usually --> can set anything there (pii = personal info, owner, ...)
+- this is example is for ```_sources.yaml``` but almost anything in dbt can be documented with yaml (stagging models, marts, ...)
+- --> for marts its usually named like ```schema.yaml```
+- --> also its maybe sometimes good to have one yaml per one model (to avoid super long ones)
+- AND the (sort of) IMPORTANT thing here: (some) ```tests``` are to be defined in those yamls (!)
+```yaml
+models:
+  - name: dim_zones
+    description: Taxi zone dimension table with location details
+    columns:
+      - name: location_id
+        description: Unique identifier for each taxi zone
+        data_tests:
+          - unique
+          - not_null
+      - name: borough
+        description: NYC borough name
+      - name: zone
+        description: Specific zone name within the borough
+      - name: service_zone
+        description: Service zone classification
+
+  - name: dim_vendors
+    description: Taxi technology vendor dimension table
+    columns:
+      - name: vendor_id
+        description: Unique vendor identifier
+        data_tests:
+          - unique
+          - not_null
+      - name: vendor_name
+        description: Company name of the vendor
+```
+- and there are also dbt commands useful here (in dbt core): ```dbt docs generate```
+- --> generates a ```catalog.json``` file = representation of EVERYTHING in documentation (plus some other stuff in models)
+- --> used to generate a website for technical documentation
+- in cloud, ```dbt docs generate``` is enough (allegedly there is a tick box for it*) X for dbt core, extra is needed: ```dbt docs serve```
+    - *its built in the cloud UI
+- --> website is openned with documentation (by default at localhost:8080 --> need to figure out how to host elsewhere if needed)
+
+## dbt packages
+
+- YT link: https://www.youtube.com/watch?v=KfhUA9Kfp8Y
+- ...
+
+... stopped at 0:01/9:41
+
+## dbt commands
+
+- YT link: https://www.youtube.com/watch?v=t4OeWHW3SsA
+- ...
+
+... stopped at 0:01/16:44
