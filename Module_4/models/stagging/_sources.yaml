@@ -7,4 +7,13 @@ sources:
     schema: zoomcamp
     tables:
       - name: yellow_tripdata
+        descrition: The bigger yellow dataset
+        columns:
+          - name: vendorid
+            description: ID of given vendor executing the ride
+            data_type: integer
+            meta:
+              pii: false
+              ownership: data_team
+              importance: high
       - name: green_tripdata
