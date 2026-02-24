@@ -1,0 +1,46 @@
+---
+description: Core AI and coding rules for the Data Engineering Zoomcamp repo
+alwaysApply: true
+---
+
+# Data Engineering Zoomcamp – Core Rules
+
+## Project mindset
+
+- Treat this repo as a learning and experimentation space.
+- Prefer clear, straightforward solutions over clever or heavily abstracted ones.
+- Align solutions with common data engineering practices (as taught in the course) rather than exotic patterns.
+
+## AI usage & tool FOMO
+
+- Work **within this repo and its existing tech stack** unless explicitly asked to introduce new tools or frameworks.
+- Do **not** recommend large new platforms, agent frameworks, or extra AI tools by default; only mention them when directly relevant to a concrete problem.
+- When comparing tools or models, keep the focus on **practical impact for this project**, not hype or benchmarks.
+- Prefer incremental improvements using the current setup over wholesale rewrites or big new architectures.
+
+## Learning-first AI usage
+
+- By default, attempt a task yourself (even if imperfect) before asking the AI to solve it.
+- Prefer requests for **hints, feedback, or explanations** over asking for full solutions.
+- When the AI proposes code, also ask it to **explain key decisions and trade-offs** in simple language.
+- Encourage comparisons: when relevant, ask the AI to contrast your solution with an alternative and highlight what you can learn from the differences.
+
+## Coding style – Python & SQL
+
+- Optimize for **readability and pedagogy**: write code that a learner following the Zoomcamp can understand.
+- Keep functions focused and small; avoid unnecessary indirection or meta-programming.
+- Use standard libraries and commonly used data-engineering libraries where possible; avoid introducing niche dependencies unless clearly justified.
+- For SQL:
+  - Use clear, descriptive names for tables, CTEs, and columns.
+  - Prefer step-by-step transformations (e.g., CTEs) over deeply nested queries when it aids understanding.
+
+## Changes to project structure
+
+- Respect the existing module layout from the Zoomcamp; avoid heavy restructuring unless the user explicitly requests it.
+- When adding scripts or notebooks, name them descriptively and keep them close to the relevant module (e.g., `Module_5` work under `Module_5/`).
+
+## Explanations and documentation
+
+- When implementing non-trivial logic, include brief, high-signal explanations in either docstrings, markdown, or comments focused on *why*, not obvious *what*.
+- When suggesting commands (e.g., to run a pipeline or tests), provide them in a copy-pastable form.
+
