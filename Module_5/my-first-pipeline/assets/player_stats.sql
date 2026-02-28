@@ -1,5 +1,4 @@
 /* @bruin
-
 name: dataset.player_stats
 type: duckdb.sql
 materialization:
@@ -7,7 +6,6 @@ materialization:
    
 depends:
    - dataset.players
-
 
 # you can define column metadata and quality checks
 columns: 
@@ -30,7 +28,6 @@ custom_checks:
     description: this check ensures that the table is not empty 
     query: SELECT count(*) > 1 FROM dataset.player_stats
     value: 1
-
 @bruin */
 
 SELECT name, count(*) AS player_count
