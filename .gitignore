@@ -3,6 +3,7 @@
 *.crc
 *.csv.gz
 **/data/
+*.csv
 
 # ... for obvious reasons
 *.json
